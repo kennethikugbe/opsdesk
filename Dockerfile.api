@@ -1,0 +1,17 @@
+# Digest pinned for repeatability; review and update it for security fixes.
+FROM python:3.14-slim@sha256:af8a5aa14780025dbfbcfbc81bd8a91ebd87711dd5b0f48ed71090949dd7cb1d
+
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+WORKDIR /app
+COPY backend/requirements.txt backend/requirements-server.txt /tmp/requirements/
+RUN python -m pip install --no-cache-dir -r /tmp/requirements/requirements-server.txt \
+    && groupadd --system --gid 10001 opsdesk \
+    && useradd --system --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin opsdesk \
+    && mkdir -p /data /app/instance \
+    && chown 10001:10001 /data /app/instance \
+    && chmod 700 /data /app/instance
+COPY backend/opsdesk/ /app/opsdesk/
+USER 10001:10001
+ENV OPSDESK_DATABASE=/data/opsdesk.sqlite3
+EXPOSE 5001
+CMD ["sh", "-c", "umask 077; exec gunicorn --workers 2 --bind 0.0.0.0:5001 --no-control-socket 'opsdesk:create_app()'"]

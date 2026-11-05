@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Least privilege: this workflow only needs to read repository contents.
+permissions:
+  contents: read
+
+# A newer push to the same branch cancels the run it supersedes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Install pinned dependencies
+        run: python -m pip install --no-cache-dir -r backend/requirements-dev.txt
+
+      - name: Record resolved versions
+        run: |
+          python -c 'import sys; print(sys.version)'
+          python -m pip list --format=freeze | grep -Ei '^(flask|pytest|werkzeug|jinja2)='
+
+      - name: Run the test suite
+        working-directory: backend
+        run: python -m pytest -q
+
+  images:
+    name: Container images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build the API image
+        run: docker build -f Dockerfile.api -t opsdesk-api:ci .
+
+      - name: Build the web image
+        run: docker build -f Dockerfile.web -t opsdesk-web:ci .
+
+      - name: Smoke-test both images over a private Docker network
+        run: |
+          set -euo pipefail
+          docker network create opsdesk-ci-net
+          docker run -d --name opsdesk-ci-api --network opsdesk-ci-net --network-alias api \
+            --security-opt no-new-privileges=true \
+            -e OPSDESK_DATABASE=/data/opsdesk.sqlite3 opsdesk-api:ci
+          docker run -d --name opsdesk-ci-web --network opsdesk-ci-net \
+            --security-opt no-new-privileges=true -p 127.0.0.1:8082:80 opsdesk-web:ci
+
+          ready=""
+          for i in $(seq 1 60); do
+            if curl -fsS --max-time 3 http://127.0.0.1:8082/health/ready >/dev/null 2>&1; then
+              ready="$i"; break
+            fi
+            sleep 1
+          done
+          if [ -z "$ready" ]; then
+            echo 'Readiness never arrived. Container logs follow.'
+            docker logs --tail 60 opsdesk-ci-api || true
+            docker logs --tail 60 opsdesk-ci-web || true
+            exit 1
+          fi
+          echo "readiness reachable after ${ready}s"
+
+          echo -n 'ready:   '; curl -fsS http://127.0.0.1:8082/health/ready; echo
+          echo -n 'summary: '; curl -fsS http://127.0.0.1:8082/api/summary; echo
+          echo -n 'index:   '; curl -fsS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8082/
+          echo -n 'app.js:  '; curl -fsS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8082/static/app.js
+          echo -n 'style:   '; curl -fsS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8082/static/style.css
+          echo -n 'absent:  '; curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8082/definitely-not-a-route
+
+          echo '--- identity and data directory inside the API container ---'
+          docker exec opsdesk-ci-api id
+          docker exec opsdesk-ci-api sh -c 'ls -ldn /data; ls -ln /data'
+
+      - name: Stop the smoke-test containers
+        if: always()
+        run: |
+          docker rm -f opsdesk-ci-api opsdesk-ci-web >/dev/null 2>&1 || true
+          docker network rm opsdesk-ci-net >/dev/null 2>&1 || true

@@ -1,0 +1,22 @@
+# Send only the files required to build the two images.
+# If an app file is added later, explicitly include it here after review.
+**
+!backend/
+backend/**
+!backend/requirements.txt
+!backend/requirements-server.txt
+!backend/opsdesk/
+backend/opsdesk/**
+!backend/opsdesk/__init__.py
+!backend/opsdesk/db.py
+!backend/opsdesk/schema.sql
+!frontend/
+frontend/**
+!frontend/index.html
+!frontend/static/
+frontend/static/**
+!frontend/static/app.js
+!frontend/static/style.css
+!Dockerfile.api
+!Dockerfile.web
+!nginx-container.conf

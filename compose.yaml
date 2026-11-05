@@ -1,0 +1,31 @@
+# Isolated learning copy: it does not mount the manual deployment databases.
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    environment:
+      OPSDESK_DATABASE: /data/opsdesk.sqlite3
+    volumes:
+      - data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5001/health/ready', timeout=3).close()"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    security_opt:
+      - no-new-privileges=true
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8082:80"
+    security_opt:
+      - no-new-privileges=true
+volumes:
+  data:
