@@ -1,0 +1,148 @@
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    # Mondays 03:24 UTC. Pinned dependencies and digest-pinned base images do not
+    # change on their own, but new advisories are published against them, so the
+    # scans are re-run weekly even when no code changes.
+    - cron: '24 3 * * 1'
+
+# Least privilege: scanning only needs to read the repository.
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secrets:
+    name: Secret scanning
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Full history matters: a secret deleted in a later commit is still
+          # readable in the earlier one, and this repository is public.
+          fetch-depth: 0
+
+      - name: Install gitleaks 8.30.1 with a checksum pin
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl -fsSL -o "$RUNNER_TEMP/gitleaks.tar.gz" \
+            'https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz'
+          printf '%s  %s\n' \
+            '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb' \
+            "$RUNNER_TEMP/gitleaks.tar.gz" | sha256sum -c -
+          tar xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP/bin" gitleaks
+          chmod 0755 "$RUNNER_TEMP/bin/gitleaks"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/bin/gitleaks" version
+
+      # Blocking: this repository is public and a leaked credential is urgent.
+      - name: Scan every commit for secrets
+        run: gitleaks git . --redact --exit-code 1 -v
+
+  deps:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+
+      - name: Install pip-audit 2.10.1
+        run: python -m pip install --no-cache-dir pip-audit==2.10.1
+
+      # Blocking: every pin is ours to change, so a known-vulnerable pin is fixable.
+      - name: Audit the runtime pins
+        working-directory: backend
+        run: pip-audit --no-deps --strict -r requirements.txt
+
+      - name: Audit the server pins
+        working-directory: backend
+        run: pip-audit --no-deps --strict -r requirements-server.txt
+
+      - name: Audit the development pins
+        working-directory: backend
+        run: pip-audit --no-deps --strict -r requirements-dev.txt
+
+  containers:
+    name: Container scanning
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build the images to scan
+        run: |
+          docker build -f Dockerfile.api -t opsdesk-api:scan .
+          docker build -f Dockerfile.web -t opsdesk-web:scan .
+
+      - name: Install Trivy 0.76.2 with a checksum pin
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl -fsSL -o "$RUNNER_TEMP/trivy.tar.gz" \
+            'https://github.com/aquasecurity/trivy/releases/download/v0.76.2/trivy_0.76.2_Linux-64bit.tar.gz'
+          printf '%s  %s\n' \
+            'bc0fc726e017b8927a62b2d3531d7a84ee01769daf5c99ed866dced54089fdbf' \
+            "$RUNNER_TEMP/trivy.tar.gz" | sha256sum -c -
+          tar xzf "$RUNNER_TEMP/trivy.tar.gz" -C "$RUNNER_TEMP/bin" trivy
+          chmod 0755 "$RUNNER_TEMP/bin/trivy"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/bin/trivy" --version
+
+      # Non-blocking on purpose. This first run establishes a baseline; findings
+      # are triaged before any of these steps is allowed to fail the build.
+      - name: Scan Dockerfiles for misconfigurations
+        run: |
+          trivy config --exit-code 0 --skip-version-check --quiet --format table . > trivy-misconfig.txt
+          cat trivy-misconfig.txt
+
+      - name: Scan the API image for vulnerabilities
+        run: |
+          trivy image --exit-code 0 --skip-version-check --quiet --format table opsdesk-api:scan > trivy-api-image.txt
+          cat trivy-api-image.txt
+
+      - name: Scan the web image for vulnerabilities
+        run: |
+          trivy image --exit-code 0 --skip-version-check --quiet --format table opsdesk-web:scan > trivy-web-image.txt
+          cat trivy-web-image.txt
+
+      - name: Write the baseline into the job summary
+        if: always()
+        run: |
+          {
+            echo '## Trivy baseline — report only'
+            echo
+            echo 'These steps pass `--exit-code 0` deliberately. Enforcement is added'
+            echo 'only after every finding below has been triaged.'
+            for f in trivy-misconfig.txt trivy-api-image.txt trivy-web-image.txt; do
+              echo
+              echo "### $f"
+              echo
+              # Four-space indentation makes Markdown render the report as a code
+              # block, so no fenced-block markers are needed inside this file.
+              if [ -f "$f" ]; then sed 's/^/    /' "$f"; else echo '    (this step did not run)'; fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the reports as an artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: trivy-baseline
+          path: |
+            trivy-misconfig.txt
+            trivy-api-image.txt
+            trivy-web-image.txt
+          if-no-files-found: warn
+          retention-days: 14
