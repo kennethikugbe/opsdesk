@@ -1,99 +1,195 @@
-# OpsDesk — full-stack local learning project
+# OpsDesk
 
-OpsDesk is a support-ticket application designed for a hands-on DevOps and DevSecOps mentorship. A team can create requests with a title, fictional requester, category, priority and description; see summaries and filter requests; and update request status.
+[![CI](https://github.com/kennethikugbe/opsdesk/actions/workflows/ci.yml/badge.svg)](https://github.com/kennethikugbe/opsdesk/actions/workflows/ci.yml)
+[![Security](https://github.com/kennethikugbe/opsdesk/actions/workflows/security.yml/badge.svg)](https://github.com/kennethikugbe/opsdesk/actions/workflows/security.yml)
+[![Licence: MIT](https://img.shields.io/badge/Licence-MIT-yellow.svg)](./LICENSE)
 
-## What is already implemented
+OpsDesk is a support-ticket application built as a **DevOps and DevSecOps lab**. A team can raise a request with a title, requester, category, priority and description, filter and read requests, update their status, and see a live summary. The application itself is deliberately small — the point of the project is everything wrapped around it: containerisation with enforced isolation, a persistent data volume, two GitHub Actions pipelines, and secret, dependency and container scanning wired into every push.
 
-- **Frontend source:** a separate, static HTML/CSS/JavaScript interface in `frontend/`.
-- **Backend source:** a Python/Flask JSON API in `backend/`, with liveness and readiness endpoints.
-- **Database:** SQLite persistence for the initial local lab. In a later milestone of this same project, the mentor will adapt the API for PostgreSQL and we will practise migration and recovery.
-- **Tests:** pytest API and separation tests in `backend/tests/`.
-- **Local development convenience:** `run_local.py` serves the separate UI files and API from one loopback-only process. It is a quick testing mode, **not** the separate frontend/backend deployment.
+It runs entirely on a local lab — a Windows host and an Ubuntu guest VM — with no cloud dependency. It is a learning environment, not a production service; see [Known limitations](#known-limitations-and-whats-next).
 
-**What is not built or deployed yet:** Dockerfiles, Docker Compose, GitHub Actions, Ansible playbooks, Terraform configurations, an Nginx deployment and a live Azure environment. You will build these with your mentor as part of the project, then push and deploy them yourself. No repository, VM, workflow or cloud resource is created by this ZIP.
+---
 
-## Important safety boundary
+## What it does
 
-This is a **local-only, production-style learning project, not a production-ready service**. It has no authentication, authorisation, TLS, rate limiting or production server. Use fictional data only. Do not expose the running app publicly, forward its port to a network, or put it on Azure until missing security controls and architecture have been addressed.
+| Area | Detail |
+| --- | --- |
+| **Backend** | Python 3.14 / Flask JSON API served by Gunicorn |
+| **Frontend** | Separate static HTML/CSS/JS, no build step, calls the API with relative URLs |
+| **Database** | SQLite, held in a permissioned Docker named volume |
+| **Tests** | 20 pytest cases covering the API and the frontend/backend separation |
+| **Containers** | Two independently deployable images behind Nginx |
+| **Pipelines** | CI and Security, both green on every push to `main` |
 
-For a private lab in a VirtualBox VM, keep application/reverse-proxy ports bound to the Ubuntu guest's loopback and access them from Windows through an SSH tunnel. This is a lab design, not a substitute for proper production identity and network controls.
-
-## Target architecture to build together
-
-```text
-Windows browser
-   │  SSH tunnel (private, local lab)
-   ▼
-Frontend service / reverse proxy (Nginx)
-   ├── /static and /        → static HTML/CSS/JS in frontend/
-   └── /api/* and /health/* → Flask backend service (Gunicorn)
-                                  │
-                                  ▼
-                              SQLite data in a persistent volume
-```
-
-The browser uses **relative API URLs**, so it calls the same frontend origin. The reverse proxy will forward API and health paths to the backend internally; no browser code should point at a VM's `localhost` or a hard-coded container address. When we reach Docker, frontend and backend will have separate images/services; the existing SQLite data must be kept in a properly permissioned persistent volume. A single Flask app serving a UI can be a valid real-world design too—this split is chosen to practise independently deployable components.
-
-## Planned DevOps work
-
-1. Install Ubuntu Server in VirtualBox and connect from Windows using SSH.
-2. Understand and test the application locally.
-3. Use Git and GitHub to track reviewed source and configuration.
-4. Create frontend and backend Dockerfiles and a Docker Compose deployment; keep its host-facing port on loopback and use an SSH tunnel. Validate persistence.
-5. Build CI with GitHub Actions: tests, security checks and image builds, subject to current account quotas.
-6. After the initial SQLite stack works, adapt the API to PostgreSQL and practise a database migration and recovery. This adaptation and the database service are not implemented yet.
-7. Use Ansible from a Linux control environment to configure a disposable/local server and deploy the stack.
-8. Practise Terraform on local-only resources; then write Azure infrastructure definitions. Do not apply Azure resources unless their cost and eligibility are verified and you approve.
-9. Add monitoring, recovery and further security controls. Azure deployment is conditional on the strict zero-spend requirement.
-
-A GitHub-hosted CI runner cannot reach a private VM at your computer's `127.0.0.1`. We will not expose your VM to the internet just to make CI deploy to it. Initially, CI can test a temporary stack in its own runner, while you deploy a reviewed version from inside your VM. Any self-hosted runner would need a separate security review.
-
-If Terraform later manages local Docker resources, it will use its own isolated lab resources rather than simultaneously managing the same containers as Docker Compose. Terraform state can include secrets: keep state and real credentials out of Git.
-
-## Local development check (after prerequisites are ready)
-
-From the project root on Ubuntu/Linux:
-
-```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install -r backend/requirements-dev.txt
-cd backend
-../.venv/bin/python -m pytest -q
-cd ..
-.venv/bin/python run_local.py
-```
-
-Then visit `http://127.0.0.1:5000` **on the computer running the app**. When the app runs in an Ubuntu VM, a browser on Windows needs a properly configured SSH tunnel. Stop the server with `Ctrl+C`. This mode uses Flask's development server and is not for production.
-
-To start only the API for development, run `python backend/run.py` using the virtual environment; it binds to guest loopback port 5000. Tests require Python 3.11 or newer. Installation downloads Python dependencies and may use internet data.
-
-## Project structure
-
-```text
-opsdesk-fullstack/
-├── frontend/                 # Static HTML, CSS and browser JavaScript
-│   ├── index.html
-│   └── static/
-├── backend/                  # Flask API, SQLite schema and tests
-│   ├── opsdesk/
-│   ├── tests/
-│   ├── run.py
-│   └── requirements*.txt
-├── run_local.py              # Local-only UI + API development convenience
-└── .gitignore                # Excludes environments, local data and secrets
-```
-
-## API
+### API
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/api` | API identification |
-| GET | `/health/live` | Process liveness |
-| GET | `/health/ready` | Database table readiness; 503 on failure |
-| GET | `/api/summary` | Counts by status |
-| GET | `/api/tickets?status=all` | Up to 100 recent requests |
-| GET | `/api/tickets/<id>` | Read one request |
-| POST | `/api/tickets` | Create a request using JSON |
-| PATCH | `/api/tickets/<id>` | Change status with JSON such as `{"status":"in_progress"}` |
+| `GET` | `/api` | Service identity and version info |
+| `GET` | `/health/live` | Liveness probe |
+| `GET` | `/health/ready` | Readiness probe, verifies the database is reachable |
+| `GET` | `/api/summary` | Counts: `open`, `in_progress`, `resolved`, `total` |
+| `GET` | `/api/tickets` | List and filter requests, newest first |
+| `POST` | `/api/tickets` | Create a request |
+| `GET` | `/api/tickets/<id>` | Read one request |
+| `PATCH` | `/api/tickets/<id>` | Update status |
 
-The backend validates input and uses parameterised SQL, but the service is not authenticated. The starter schema is initialised at startup; it is not a migration system. Avoid committing `instance/`, virtual environments, credentials or real data. The `.gitignore` is helpful but you must still inspect each commit.
+Every response carries hardened headers — `Content-Security-Policy: default-src 'self'`, `X-Content-Type-Options: nosniff` and `X-Frame-Options: DENY` — and the test suite asserts them, so removing one fails the build.
+
+---
+
+## Architecture
+
+Two services, two images, one persistent volume. The browser only ever talks to Nginx; the API is never exposed to the host.
+
+```text
+Windows browser
+   │
+   │  SSH tunnel  (127.0.0.1:18082  →  guest 127.0.0.1:8082)
+   ▼
+Ubuntu VM
+   ┌───────────────────────────────────────────────────────┐
+   │  Docker network (internal)                            │
+   │                                                       │
+   │   web  (nginx:1.28-alpine, digest-pinned)             │
+   │     ├── /            static files from frontend/      │
+   │     ├── /static/     CSS + JS                         │
+   │     ├── /api/*    ──► api:5001                        │
+   │     └── /health/* ──► api:5001                        │
+   │                        │                              │
+   │                   api  (python:3.14-slim,             │
+   │                         digest-pinned, UID 10001)     │
+   │                        │  Gunicorn, 2 workers         │
+   │                        ▼                              │
+   │                   named volume `data` → /data         │
+   │                   (10001:10001, mode 0700)            │
+   │                        └── opsdesk.sqlite3 (0600)     │
+   └───────────────────────────────────────────────────────┘
+        only published port: 127.0.0.1:8082 → web:80
+```
+
+Nginx resolves the API through Docker's embedded DNS (`resolver 127.0.0.11 valid=5s ipv6=off`) rather than a hard-coded container IP, so the API can be recreated on a new address without a restart of the proxy. Anything that is not `/`, `/index.html`, `/static/`, `/api/` or `/health/` returns 404 — the proxy does not fall through to the backend.
+
+---
+
+## Container hardening
+
+These are enforced in the committed Dockerfiles and Compose file, not documented intentions:
+
+- **Non-root application process.** `Dockerfile.api` creates a system user `opsdesk` at UID/GID `10001` and ends with `USER 10001:10001`. Verified inside a running container.
+- **Locked-down data directory.** `/data` and `/app/instance` are `chown 10001:10001` and `chmod 700`. The API starts under `umask 077`, so the SQLite file is created `0600`. Verified: `drwx------ 1 10001 10001 /data` and `-rw------- 1 10001 10001 opsdesk.sqlite3`.
+- **Digest-pinned base images.** Both Dockerfiles pin `@sha256:…` rather than a floating tag, so a build is reproducible and a base-image update is an explicit, reviewable change.
+- **`no-new-privileges=true`** on both services, blocking setuid escalation.
+- **Named volume for persistence.** Data survives `docker compose down`, rebuilds and image updates; the container filesystem holds nothing worth keeping.
+- **Healthcheck-gated startup.** `web` declares `depends_on: api: condition: service_healthy`, so Nginx does not start until `/health/ready` passes 12 retries at 5s intervals.
+- **Loopback-only publishing.** The single published port is bound to `127.0.0.1:8082`, so the stack is unreachable from the VM's network interface. Access from Windows goes through an SSH tunnel.
+- **Allowlist `.dockerignore`.** It excludes everything and re-includes only the directories a build needs, so local databases, virtual environments and editor files cannot leak into an image layer.
+
+---
+
+## CI/CD
+
+Two workflows run on every push and pull request to `main`.
+
+### `ci.yml` — build and verify
+
+| Job | Steps |
+| --- | --- |
+| **Backend tests** | Install fully pinned dependencies → record the resolved versions → run the pytest suite |
+| **Container images** | Build both images → start them on a private Docker network → smoke-test readiness, the summary endpoint, static assets and 404 behaviour → tear the containers down |
+
+The smoke test runs against real containers, not mocks: it asserts the process identity is UID `10001`, that `/data` is `drwx------`, and that the database file is `-rw-------`.
+
+### `security.yml` — scan
+
+| Job | Tool | Enforcement |
+| --- | --- | --- |
+| **Secret scanning** | gitleaks 8.30.1 over the **full history** (`fetch-depth: 0`) | **Blocking** |
+| **Dependency audit** | pip-audit 2.10.1 against all three pin files | **Blocking** |
+| **Container scanning** | Trivy 0.76.2: Dockerfile misconfiguration + both built images | Report-only baseline |
+
+Scanners are installed by exact-version download URL and verified against a recorded SHA-256 checksum before use, with no `sudo`. The workflow also runs on a weekly schedule, because pinned dependencies do not change on their own but new advisories against them do. Trivy reports are written into the job summary and uploaded as an artefact.
+
+**Why the split between blocking and report-only?** Secret leaks and vulnerable pins are mine to fix immediately, so they fail the build. Container findings need triage against a known baseline first; failing on day one would produce a permanently red build that teaches nothing. Enforcement is added per finding once it is understood.
+
+---
+
+## Project layout
+
+```text
+.
+├── backend/
+│   ├── opsdesk/          Flask application factory, schema, database access
+│   ├── tests/            pytest suite
+│   ├── requirements.in   Declared runtime dependencies
+│   ├── requirements.txt  Fully resolved runtime pins
+│   └── requirements-server.txt   Adds Gunicorn for the deployed image
+├── frontend/
+│   ├── index.html
+│   └── static/           app.js, style.css
+├── deploy/manual/        Systemd unit + host Nginx config for a non-container deploy
+├── .github/workflows/    ci.yml, security.yml
+├── Dockerfile.api        Gunicorn + Flask, non-root
+├── Dockerfile.web        Nginx serving the static frontend
+├── nginx-container.conf  Reverse proxy configuration
+├── compose.yaml          Two services, named volume, healthcheck
+├── run_local.py          Single-process loopback development convenience
+└── .dockerignore         Allowlist build context
+```
+
+---
+
+## Running it locally
+
+Prerequisites: Docker Engine with the Compose plugin.
+
+```bash
+git clone https://github.com/kennethikugbe/opsdesk.git
+cd opsdesk
+
+docker compose up --build -d
+docker compose ps                       # api should report (healthy)
+
+curl http://127.0.0.1:8082/health/ready
+curl http://127.0.0.1:8082/api/summary
+```
+
+Then open `http://127.0.0.1:8082/` in a browser on the same machine.
+
+To reach the stack from another machine on the host — for example a Windows browser talking to a Linux VM — tunnel to the loopback port rather than publishing it on an interface:
+
+```bash
+ssh -N -L 18082:127.0.0.1:8082 user@vm-host
+```
+
+Persistence check:
+
+```bash
+docker compose down
+docker compose up -d
+curl http://127.0.0.1:8082/api/summary   # tickets from before the rebuild are still present
+```
+
+### Without containers
+
+`deploy/manual/` contains a systemd unit and a host Nginx configuration for running the same code as two host services instead. `run_local.py` is a development shortcut that serves the frontend and API from one loopback-only process; it is **not** the separated deployment.
+
+---
+
+## Known limitations and what's next
+
+This section is deliberate. Recording what is not yet true is part of the work.
+
+**Open security findings.** Trivy reports `DS-0002` (HIGH) against `Dockerfile.web`: the Nginx image runs its master process as root in order to bind port 80. Fixing it means moving to an unprivileged listen port, adding a `USER` directive, and updating the proxy configuration and the Compose port mapping together — a change that needs a full rebuild test before it lands. `DS-0026` (LOW) notes the absence of an image-level `HEALTHCHECK`; the API is partly mitigated by a Compose-level healthcheck, but an image-level check would also protect a plain `docker run`. Base-image vulnerability findings from the report-only scan are pending triage.
+
+**Not implemented.** There is no authentication, authorisation, TLS or rate limiting. SQLite is single-writer and unsuitable for concurrent load; `backend/opsdesk/db.py` talks to `sqlite3` directly, so a PostgreSQL migration means changing the data-access layer, not just a connection string. The Compose file is not assessed by `trivy config`, which detects only the two Dockerfiles.
+
+**Planned.** PostgreSQL with a practised migration and recovery path · Ansible for repeatable server configuration · Terraform against an isolated local provider · monitoring, alerting and backup/restore verification.
+
+**Safety boundary.** This is a local lab using fictional data. Do not expose the running application publicly, forward its port to a network interface, or deploy it to a cloud provider until the missing security controls above are addressed.
+
+---
+
+## Licence
+
+MIT — see [LICENSE](./LICENSE). © 2026 Kenneth Ikugbe.
