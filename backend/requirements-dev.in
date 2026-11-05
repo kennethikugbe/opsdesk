@@ -1,0 +1,2 @@
+# Direct development dependencies. requirements-dev.txt pins these and their dependencies.
+pytest==9.0.3

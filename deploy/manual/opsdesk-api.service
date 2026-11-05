@@ -1,0 +1,28 @@
+# Manual Ubuntu lab service. The application is unauthenticated: do not expose it.
+# Prerequisites: a restricted opsdesk user/group; code and venv installed under
+# /opt/opsdesk; an existing, readable /opt/opsdesk/backend/instance directory.
+[Unit]
+Description=OpsDesk API (private local learning lab)
+After=network.target
+
+[Service]
+Type=exec
+User=opsdesk
+Group=opsdesk
+WorkingDirectory=/opt/opsdesk/backend
+Environment=OPSDESK_DATABASE=/var/lib/opsdesk/opsdesk.sqlite3
+Environment=PYTHONDONTWRITEBYTECODE=1
+UMask=0077
+StateDirectory=opsdesk
+StateDirectoryMode=0700
+ExecStart=/opt/opsdesk/.venv/bin/python -m gunicorn --no-control-socket --bind 127.0.0.1:5001 --workers 2 --access-logfile - --error-logfile - run:app
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/opsdesk
+
+[Install]
+WantedBy=multi-user.target

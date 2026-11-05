@@ -1,0 +1,8 @@
+-r requirements.txt
+iniconfig==2.3.1
+packaging==26.3
+pluggy==1.7.0
+Pygments==2.21.0
+pytest==9.0.3
+# pytest's Windows-only dependency; pinned for a reproducible Windows install.
+colorama==0.4.6; sys_platform == "win32"

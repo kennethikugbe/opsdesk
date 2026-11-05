@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>OpsDesk — Team support requests</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/" aria-label="OpsDesk home"><span class="brand-mark">O</span><span>opsdesk<span class="brand-period">.</span></span></a>
+      <span class="environment"><span class="status-dot"></span> LOCAL WORKSPACE</span>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <section class="heading">
+      <div>
+        <p class="eyebrow">TEAM SUPPORT / OVERVIEW</p>
+        <h1>Support, sorted.</h1>
+        <p class="subtitle">A simple place to track requests, follow progress, and keep your team moving.</p>
+      </div>
+      <span class="version">PROJECT 01 <span>·</span> DEVOPS LAB</span>
+    </section>
+
+    <div class="notice" role="note"><strong>Local training application.</strong> Use fictional data only. Authentication is not implemented; do not expose this app publicly.</div>
+
+    <section class="stats" aria-label="Ticket summary">
+      <article class="stat"><span class="stat-label">TOTAL REQUESTS</span><strong id="stat-total">—</strong><span class="stat-note">All tickets</span></article>
+      <article class="stat"><span class="stat-label">OPEN</span><strong id="stat-open">—</strong><span class="stat-note"><i class="dot dot-amber"></i> Awaiting action</span></article>
+      <article class="stat"><span class="stat-label">IN PROGRESS</span><strong id="stat-progress">—</strong><span class="stat-note"><i class="dot dot-blue"></i> Being worked on</span></article>
+      <article class="stat"><span class="stat-label">RESOLVED</span><strong id="stat-resolved">—</strong><span class="stat-note"><i class="dot dot-green"></i> Completed</span></article>
+    </section>
+
+    <div class="content-grid">
+      <section class="panel form-panel" aria-labelledby="new-heading">
+        <div class="panel-heading"><div><p class="eyebrow">LET'S GET STARTED</p><h2 id="new-heading">New request</h2><p class="panel-description">Share the details so the right person can help.</p></div><span class="add-mark" aria-hidden="true">+</span></div>
+        <form id="ticket-form">
+          <label for="title">Subject <span>REQUIRED</span></label>
+          <input id="title" name="title" type="text" minlength="5" maxlength="120" placeholder="e.g. Unable to access the dashboard" required>
+
+          <label for="requester">Requester name <span>REQUIRED</span></label>
+          <input id="requester" name="requester" type="text" minlength="2" maxlength="80" placeholder="Use a fictional name" required>
+
+          <div class="form-row">
+            <div><label for="category">Category</label><select id="category" name="category"><option value="access">Access</option><option value="hardware">Hardware</option><option value="software">Software</option><option value="other">Other</option></select></div>
+            <div><label for="priority">Priority</label><select id="priority" name="priority"><option value="low">Low</option><option value="normal" selected>Normal</option><option value="high">High</option></select></div>
+          </div>
+
+          <label for="description">Description <span>REQUIRED</span></label>
+          <textarea id="description" name="description" minlength="10" maxlength="2000" rows="5" placeholder="What happened? Include useful context." required></textarea>
+          <button class="primary-button" type="submit">Create request <span aria-hidden="true">↗</span></button>
+          <p id="form-message" class="message" role="status" aria-live="polite"></p>
+        </form>
+      </section>
+
+      <section class="panel requests-panel" aria-labelledby="requests-heading">
+        <div class="panel-heading request-heading"><div><p class="eyebrow">THE WORK QUEUE</p><h2 id="requests-heading">Recent requests</h2><p class="panel-description">Showing up to 100 of the newest requests.</p></div>
+          <div class="filter"><label for="filter">STATUS</label><select id="filter"><option value="all">All statuses</option><option value="open">Open</option><option value="in_progress">In progress</option><option value="resolved">Resolved</option></select></div>
+        </div>
+        <p id="list-message" class="message" role="status" aria-live="polite"></p>
+        <ul id="ticket-list" class="ticket-list" aria-label="Recent support requests"></ul>
+        <div id="empty-state" class="empty-state" hidden><span class="empty-icon" aria-hidden="true">✓</span><strong>Nothing in the queue</strong><p>No requests match this view. Create one to get started.</p></div>
+      </section>
+    </div>
+  </main>
+  <footer class="footer"><span>OPSDESK <span>·</span> A LEARNING PROJECT</span><span><a href="/health/live">Liveness</a> <span>·</span> <a href="/health/ready">Readiness</a></span></footer>
+  <noscript>This application needs JavaScript to create and display tickets.</noscript>
+</body>
+</html>
