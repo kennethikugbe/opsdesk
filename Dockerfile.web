@@ -1,5 +1,5 @@
 # Digest pinned for repeatability; review and update it for security fixes.
-FROM nginx:1.28-alpine@sha256:a8b39bd9cf0f83869a2162827a0caf6137ddf759d50a171451b335cecc87d236
+FROM nginx:1.30-alpine@sha256:e9b2d7624fd7957f4ed44ae0a272d93fb73aeb8512ba8916f8118ae6143fd115
 COPY nginx-container.conf /etc/nginx/conf.d/default.conf
 COPY frontend/ /usr/share/nginx/html/
 EXPOSE 80
